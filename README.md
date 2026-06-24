@@ -27,6 +27,9 @@ hits, frame reduction, and active transforms, all updating live in your terminal
 
 It is the hybrid-car regen meter for AI context.
 
+The new speedometer shows the latest completed request in real time. The
+odometer beside it shows the cumulative tokens recovered during the session.
+
 ## Field Reading
 
 Example measurement from one local Codex + Headroom session on June 24, 2026:
@@ -50,6 +53,7 @@ configuration.
 ## Why Teams Care
 
 - **See ROI while work is happening.** A live meter makes compression tangible.
+- **Get an instant current reading.** The speedometer answers, "how much did the last request save?"
 - **Debug context-heavy agent sessions.** Spikes and flatlines are visible at a glance.
 - **Explain Headroom to non-operators.** The dashboard is easier to understand than `tok_before=...`.
 - **Keep the stack lightweight.** One Python script, no packages, no daemon, no telemetry.
@@ -150,6 +154,8 @@ tok_before=60229 tok_after=57678 tok_saved=2551 cache_hit_pct=98
 Then it turns them into:
 
 - token regen gauge
+- live savings speedometer
+- cumulative token odometer
 - recent request pulse graph
 - frame compression graph
 - cache battery

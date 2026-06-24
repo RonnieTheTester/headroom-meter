@@ -28,6 +28,28 @@ frame compressed 48145->42353 bytes (1279 tokens saved, auth_mode=oauth, frame=6
 
 Those lines drive the frame-compression graph.
 
+## Speedometer vs Odometer
+
+The speedometer is intentionally a current reading. It uses the latest completed
+request:
+
+```text
+latest savings % = tok_saved / tok_before
+```
+
+That makes sudden strong or weak compression visible immediately.
+
+The odometer is cumulative:
+
+```text
+odometer = sum(tok_saved)
+```
+
+The two numbers answer different questions:
+
+- **Speedometer:** how much did Headroom save right now?
+- **Odometer:** how much has Headroom saved over this session/log?
+
 ## Example Field Reading
 
 One local Codex + Headroom session produced this reading on June 24, 2026:

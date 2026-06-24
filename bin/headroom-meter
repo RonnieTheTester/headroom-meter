@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 DEFAULT_LOG = Path.home() / ".headroom" / "logs" / "proxy.log"
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 
 PERF_RE = re.compile(
     r"tok_before=(?P<before>\d+).*?"
@@ -323,26 +323,53 @@ def sparkline(
     return color("".join(chars), compression_color(max(data)), use_color)
 
 
-def flow_line(meter: Meter, width: int, use_color: bool, ascii_mode: bool) -> str:
-    if ascii_mode:
-        arrows = ["-->", "==>", ">>>"]
-        raw = "RAW"
-        saved = "SAVED"
-        sent = "SENT"
-    else:
-        arrows = ["->", "=>", ">>"]
-        raw = "RAW"
-        saved = "REGEN"
-        sent = "MODEL"
+def place_labels(width: int, labels: list[tuple[int, str]]) -> str:
+    chars = [" "] * max(width, 1)
+    for pos, text in labels:
+        start = min(max(pos - len(text) // 2, 0), max(len(chars) - len(text), 0))
+        for offset, char in enumerate(text):
+            idx = start + offset
+            if 0 <= idx < len(chars):
+                chars[idx] = char
+    return "".join(chars).rstrip()
 
-    pulse = arrows[meter.frame_count % len(arrows)]
-    last_saved = meter.last_perf.saved if meter.last_perf else 0
-    last_after = meter.last_perf.after if meter.last_perf else 0
-    saved_text = color(f"{fmt_int(last_saved)} tokens", compression_color(percent(last_saved, max(last_saved + last_after, 1))), use_color)
-    base = f"{raw} {pulse} {saved} {saved_text} {pulse} {sent}"
-    if use_color:
-        return base
-    return base[:width]
+
+def speedometer(
+    value: float,
+    *,
+    saved_tokens: int,
+    total_saved: int,
+    scale: float,
+    width: int,
+    use_color: bool,
+    ascii_mode: bool,
+) -> list[str]:
+    dial_width = min(max(width - 6, 34), 76)
+    ratio = 0.0 if scale <= 0 else min(max(value / scale, 0.0), 1.0)
+    needle = round(ratio * (dial_width - 1))
+    half = round((dial_width - 1) / 2)
+
+    if ascii_mode:
+        left_cap, right_cap, fill, empty, needle_char = "[", "]", "=", "-", "^"
+    else:
+        left_cap, right_cap, fill, empty, needle_char = "╭", "╮", "━", "─", "▲"
+
+    track = fill * needle + needle_char + empty * max(dial_width - needle - 1, 0)
+    dial = f"  {left_cap}{color(track, compression_color(value), use_color)}{right_cap}"
+    labels = place_labels(
+        dial_width + 2,
+        [
+            (0, "0%"),
+            (half, f"{scale / 2:g}%"),
+            (dial_width + 1, f"{scale:g}%+"),
+        ],
+    )
+    readout = (
+        f"  {color(f'{value:5.2f}% NOW', BOLD + compression_color(value), use_color)}  "
+        f"{fmt_int(saved_tokens)} saved last request  "
+        f"{color('ODOMETER', DIM, use_color)} {fmt_int(total_saved)} tokens"
+    )
+    return [f"  {color(labels, DIM, use_color)}", dial, readout]
 
 
 def short_transforms(line: str | None) -> str:
@@ -367,6 +394,7 @@ def render(meter: Meter, log_path: Path, scale: float, use_color: bool, ascii_mo
     width = min(max(columns - 4, 76), 118)
     gauge_width = min(max(width - 33, 28), 62)
     spark_width = min(max(width - 30, 32), 72)
+    speedometer_width = min(max(width - 4, 52), 96)
 
     saving_pct = meter.token_savings_pct
     byte_pct = meter.byte_savings_pct
@@ -387,11 +415,21 @@ def render(meter: Meter, log_path: Path, scale: float, use_color: bool, ascii_mo
         f"Status {status_text}  Last event {fmt_age(meter.last_event_at)}  Log {dim_log}",
         rule,
         "",
+        color("LIVE SAVINGS SPEEDOMETER", BOLD + WHITE, use_color),
+        *speedometer(
+            last_pct,
+            saved_tokens=last_saved,
+            total_saved=meter.tok_saved,
+            scale=scale,
+            width=speedometer_width,
+            use_color=use_color,
+            ascii_mode=ascii_mode,
+        ),
+        "",
         color("TOKEN REGEN", BOLD + WHITE, use_color),
         f"  {gauge(saving_pct, scale=scale, width=gauge_width, use_color=use_color, ascii_mode=ascii_mode)} "
         f"{saving_pct:5.2f}% captured  "
         f"{color('(full scale: ' + f'{scale:g}%' + ')', DIM, use_color)}",
-        f"  {flow_line(meter, width - 2, use_color, ascii_mode)}",
         "",
         color("RECENT REQUEST PULSES", BOLD + WHITE, use_color),
         f"  {sparkline(meter.recent_pct, width=spark_width, scale=scale, use_color=use_color, ascii_mode=ascii_mode)}",
