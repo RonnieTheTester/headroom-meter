@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""Live terminal meter for Headroom proxy compression logs."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import signal
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+
+DEFAULT_LOG = Path.home() / ".headroom" / "logs" / "proxy.log"
+
+PERF_RE = re.compile(
+    r"tok_before=(?P<before>\d+).*?"
+    r"tok_after=(?P<after>\d+).*?"
+    r"tok_saved=(?P<saved>\d+).*?"
+    r"cache_read=(?P<cache_read>\d+).*?"
+    r"cache_write=(?P<cache_write>\d+).*?"
+    r"cache_hit_pct=(?P<cache_hit>\d+).*?"
+    r"opt_ms=(?P<opt_ms>\d+)"
+)
+FRAME_RE = re.compile(
+    r"frame compressed (?P<before>\d+)\D+(?P<after>\d+) bytes "
+    r"\((?P<saved>\d+) tokens saved"
+)
+TOIN_RE = re.compile(
+    r"TOIN: (?P<patterns>\d+) patterns, (?P<compressions>\d+) compressions, "
+    r"(?P<retrievals>\d+) retrievals, (?P<rate>[0-9.]+)% retrieval rate"
+)
+TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})")
+
+
+@dataclass
+class PerfSample:
+    before: int
+    after: int
+    saved: int
+    cache_read: int
+    cache_write: int
+    cache_hit: int
+    opt_ms: int
+    line: str
+
+
+@dataclass
+class FrameSample:
+    before: int
+    after: int
+    saved: int
+
+
+@dataclass
+class ToinSample:
+    patterns: int
+    compressions: int
+    retrievals: int
+    rate: float
+
+
+class Meter:
+    def __init__(self) -> None:
+        self.perf_requests = 0
+        self.tok_before = 0
+        self.tok_after = 0
+        self.tok_saved = 0
+        self.cache_weighted = 0
+        self.cache_weight = 0
+        self.opt_ms_total = 0
+        self.frame_count = 0
+        self.frame_before = 0
+        self.frame_after = 0
+        self.frame_tokens_saved = 0
+        self.last_perf: PerfSample | None = None
+        self.last_frame: FrameSample | None = None
+        self.last_toin: ToinSample | None = None
+        self.last_event_at: datetime | None = None
+
+    def add_line(self, line: str) -> bool:
+        changed = False
+        timestamp = parse_timestamp(line)
+
+        # Headroom currently emits duplicate PERF lines; only the line with
+        # total_ms represents the completed request.
+        if " PERF " in line and "total_ms=" in line:
+            match = PERF_RE.search(line)
+            if match:
+                sample = PerfSample(
+                    before=int(match.group("before")),
+                    after=int(match.group("after")),
+                    saved=int(match.group("saved")),
+                    cache_read=int(match.group("cache_read")),
+                    cache_write=int(match.group("cache_write")),
+                    cache_hit=int(match.group("cache_hit")),
+                    opt_ms=int(match.group("opt_ms")),
+                    line=line.rstrip(),
+                )
+                self.perf_requests += 1
+                self.tok_before += sample.before
+                self.tok_after += sample.after
+                self.tok_saved += sample.saved
+                self.cache_weighted += sample.cache_hit * max(sample.before, 1)
+                self.cache_weight += max(sample.before, 1)
+                self.opt_ms_total += sample.opt_ms
+                self.last_perf = sample
+                self.last_event_at = timestamp or datetime.now()
+                changed = True
+
+        if "frame compressed" in line:
+            match = FRAME_RE.search(line)
+            if match:
+                sample = FrameSample(
+                    before=int(match.group("before")),
+                    after=int(match.group("after")),
+                    saved=int(match.group("saved")),
+                )
+                self.frame_count += 1
+                self.frame_before += sample.before
+                self.frame_after += sample.after
+                self.frame_tokens_saved += sample.saved
+                self.last_frame = sample
+                self.last_event_at = timestamp or datetime.now()
+                changed = True
+
+        if "TOIN:" in line:
+            match = TOIN_RE.search(line)
+            if match:
+                self.last_toin = ToinSample(
+                    patterns=int(match.group("patterns")),
+                    compressions=int(match.group("compressions")),
+                    retrievals=int(match.group("retrievals")),
+                    rate=float(match.group("rate")),
+                )
+                self.last_event_at = timestamp or datetime.now()
+                changed = True
+
+        return changed
+
+    @property
+    def token_savings_pct(self) -> float:
+        return percent(self.tok_saved, self.tok_before)
+
+    @property
+    def byte_savings_pct(self) -> float:
+        if self.frame_before <= 0:
+            return 0.0
+        return percent(self.frame_before - self.frame_after, self.frame_before)
+
+    @property
+    def avg_cache_hit(self) -> float:
+        if self.cache_weight <= 0:
+            return 0.0
+        return self.cache_weighted / self.cache_weight
+
+    @property
+    def avg_opt_ms(self) -> float:
+        if self.perf_requests <= 0:
+            return 0.0
+        return self.opt_ms_total / self.perf_requests
+
+
+def parse_timestamp(line: str) -> datetime | None:
+    match = TS_RE.match(line)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group("ts"), "%Y-%m-%d %H:%M:%S,%f")
+    except ValueError:
+        return None
+
+
+def percent(part: int | float, whole: int | float) -> float:
+    if whole <= 0:
+        return 0.0
+    return 100.0 * part / whole
+
+
+def fmt_int(value: int) -> str:
+    return f"{value:,}"
+
+
+def fmt_age(dt: datetime | None) -> str:
+    if dt is None:
+        return "no events yet"
+    seconds = max(0, int((datetime.now() - dt).total_seconds()))
+    if seconds < 60:
+        return f"{seconds}s ago"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds}s ago"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m ago"
+
+
+def bar(value: float, *, scale: float, width: int = 34) -> str:
+    ratio = 0.0 if scale <= 0 else min(max(value / scale, 0.0), 1.0)
+    filled = round(ratio * width)
+    return "[" + "#" * filled + "-" * (width - filled) + "]"
+
+
+def short_transforms(line: str | None) -> str:
+    if not line or "transforms=" not in line:
+        return "none"
+    raw = line.split("transforms=", 1)[1].split(" client=", 1)[0]
+    names: list[str] = []
+    for token in raw.split():
+        name = token.rsplit(":", 1)[-1]
+        if name and name not in names:
+            names.append(name)
+    return ", ".join(names[:6]) or "none"
+
+
+def status_label(meter: Meter) -> str:
+    if meter.last_event_at is None:
+        return "waiting"
+    seconds = (datetime.now() - meter.last_event_at).total_seconds()
+    if seconds < 30:
+        return "active"
+    if seconds < 180:
+        return "idle"
+    return "stale"
+
+
+def render(meter: Meter, log_path: Path, scale: float) -> str:
+    saving_pct = meter.token_savings_pct
+    byte_pct = meter.byte_savings_pct
+    last_saved = meter.last_perf.saved if meter.last_perf else 0
+    last_before = meter.last_perf.before if meter.last_perf else 0
+    last_pct = percent(last_saved, last_before)
+
+    lines = [
+        "Headroom Live Meter",
+        f"Status: {status_label(meter)}  Last event: {fmt_age(meter.last_event_at)}",
+        f"Log: {log_path}",
+        "",
+        f"Token savings  {bar(saving_pct, scale=scale)} {saving_pct:5.2f}% "
+        f"(scale full = {scale:g}%)",
+        f"Saved tokens:  {fmt_int(meter.tok_saved)} / {fmt_int(meter.tok_before)} "
+        f"input tokens across {fmt_int(meter.perf_requests)} requests",
+        f"Last request:  {fmt_int(last_saved)} tokens saved "
+        f"from {fmt_int(last_before)} ({last_pct:.2f}%)",
+        "",
+        f"Frame bytes    {bar(byte_pct, scale=scale)} {byte_pct:5.2f}%",
+        f"Frame events:  {fmt_int(meter.frame_count)} frames, "
+        f"{fmt_int(meter.frame_tokens_saved)} frame tokens saved",
+        "",
+        f"Cache hit avg: {meter.avg_cache_hit:5.1f}%   "
+        f"Avg optimize: {meter.avg_opt_ms:,.0f} ms",
+        f"Transforms:   {short_transforms(meter.last_perf.line if meter.last_perf else None)}",
+    ]
+
+    if meter.last_toin:
+        lines.extend(
+            [
+                f"TOIN:         {fmt_int(meter.last_toin.patterns)} patterns, "
+                f"{fmt_int(meter.last_toin.compressions)} compressions, "
+                f"{fmt_int(meter.last_toin.retrievals)} retrievals "
+                f"({meter.last_toin.rate:.1f}% retrieval rate)",
+            ]
+        )
+
+    lines.extend(["", "Ctrl-C to exit."])
+    return "\n".join(lines)
+
+
+def clear_and_print(text: str) -> None:
+    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.write(text)
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+
+def read_available(handle, meter: Meter) -> bool:
+    changed = False
+    while True:
+        line = handle.readline()
+        if not line:
+            break
+        changed = meter.add_line(line) or changed
+    return changed
+
+
+def open_log(path: Path):
+    while True:
+        try:
+            return path.open("r", encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            time.sleep(1.0)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Show a live terminal meter for Headroom compression."
+    )
+    parser.add_argument(
+        "--log",
+        type=Path,
+        default=DEFAULT_LOG,
+        help=f"Headroom proxy log path. Default: {DEFAULT_LOG}",
+    )
+    parser.add_argument(
+        "--live-only",
+        action="store_true",
+        help="Ignore existing log contents and count only new events.",
+    )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Print one snapshot and exit.",
+    )
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=25.0,
+        help="Savings percent that fills the bar. Default: 25.",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="Refresh interval in seconds. Default: 1.",
+    )
+    args = parser.parse_args()
+
+    meter = Meter()
+    log_path = args.log.expanduser()
+    handle = open_log(log_path)
+
+    if args.live_only:
+        handle.seek(0, os.SEEK_END)
+    else:
+        read_available(handle, meter)
+
+    if args.once:
+        print(render(meter, log_path, args.scale))
+        return 0
+
+    stop = False
+
+    def request_stop(_signum, _frame) -> None:
+        nonlocal stop
+        stop = True
+
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
+
+    try:
+        sys.stdout.write("\033[?25l")
+        while not stop:
+            read_available(handle, meter)
+            clear_and_print(render(meter, log_path, args.scale))
+            time.sleep(max(args.interval, 0.1))
+
+            try:
+                stat = log_path.stat()
+            except FileNotFoundError:
+                continue
+            if handle.tell() > stat.st_size:
+                handle.close()
+                handle = open_log(log_path)
+    finally:
+        try:
+            handle.close()
+        finally:
+            sys.stdout.write("\033[?25h\n")
+            sys.stdout.flush()
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
