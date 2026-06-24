@@ -30,6 +30,11 @@ jobs:
       - name: Check version flag
         run: bin/headroom-meter --version
 
+      - name: Check explanation output
+        run: |
+          bin/headroom-meter /help
+          bin/headroom-meter --explain
+
       - name: Validate demo SVG
         run: python -c "import xml.etree.ElementTree as ET; ET.parse('assets/demo.svg')"
 

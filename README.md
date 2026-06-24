@@ -137,6 +137,18 @@ Check the installed version:
 headroom-meter --version
 ```
 
+Explain the dashboard labels:
+
+```bash
+headroom-meter /help
+```
+
+or:
+
+```bash
+headroom-meter --explain
+```
+
 ## What It Measures
 
 By default, `headroom-meter` tails:
@@ -164,6 +176,24 @@ Then it turns them into:
 - TOIN pattern/compression activity
 
 The script is read-only. It does not modify Headroom config or send data anywhere.
+
+## Dashboard Labels
+
+| Label | What it means |
+| --- | --- |
+| **Live Savings Speedometer** | The current savings level for the latest completed request. This is the fastest way to tell whether Headroom is working right now. |
+| **NOW** | The latest request's savings percentage: `tok_saved / tok_before`. |
+| **Odometer** | Cumulative tokens saved across the log or current `--live-only` session. |
+| **Token Regen** | Aggregate compression rate across completed requests. Think of this as overall recovered context. |
+| **Recent Request Pulses** | A sparkline of recent request savings. Taller pulses mean stronger recent compression spikes. |
+| **Frame Compression** | WebSocket frame byte reduction. This is transport/frame-level compression, separate from request-level token savings. |
+| **Saved Tokens** | Total `tok_saved` observed by the meter. |
+| **Last Request** | Tokens saved by the most recently completed request. |
+| **Requests** | Completed request count plus average tokens saved per request. |
+| **Cache Battery** | Weighted average `cache_hit_pct`. Higher means more context is being reused from cache. |
+| **Optimize Time** | Average time Headroom spent optimizing/compressing before forwarding upstream. |
+| **Transforms** | Headroom transformations seen on the latest request, such as `text`, `smart_crusher`, `kompress`, or `log`. |
+| **TOIN** | Headroom token/object indexing activity: patterns, compressions, retrievals, and retrieval rate. |
 
 ## How The Technology Fits
 

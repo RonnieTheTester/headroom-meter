@@ -50,6 +50,15 @@ The two numbers answer different questions:
 - **Speedometer:** how much did Headroom save right now?
 - **Odometer:** how much has Headroom saved over this session/log?
 
+The same glossary is available in the terminal:
+
+```bash
+headroom-meter /help
+```
+
+`/help` does not start live mode. It prints the dashboard label explanations and
+exits.
+
 ## Example Field Reading
 
 One local Codex + Headroom session produced this reading on June 24, 2026:

@@ -17,7 +17,64 @@ from pathlib import Path
 
 
 DEFAULT_LOG = Path.home() / ".headroom" / "logs" / "proxy.log"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
+
+EXPLAIN_TEXT = """\
+headroom-meter dashboard labels
+
+LIVE SAVINGS SPEEDOMETER
+  Current savings level for the latest completed request. This answers:
+  "How much did Headroom save right now?"
+
+NOW
+  The latest request's savings percentage: tok_saved / tok_before.
+
+ODOMETER
+  Cumulative tokens saved across the log or current live-only session.
+
+TOKEN REGEN
+  Aggregate compression rate across completed requests. It is the overall
+  percentage of input tokens Headroom avoided sending upstream.
+
+RECENT REQUEST PULSES
+  A sparkline of recent request savings. Taller pulses mean stronger recent
+  compression spikes.
+
+FRAME COMPRESSION
+  WebSocket frame byte reduction. This shows compression happening at the
+  transport/frame level, separate from request-level token savings.
+
+SAVED TOKENS
+  Total tok_saved observed by the meter.
+
+LAST REQUEST
+  Tokens saved by the most recently completed request.
+
+REQUESTS
+  Number of completed requests included in the meter, plus average tokens saved
+  per completed request.
+
+CACHE BATTERY
+  Weighted average cache hit percentage from Headroom logs. Higher means more
+  context is being reused from cache.
+
+OPTIMIZE TIME
+  Average time Headroom spent optimizing/compressing a request before forwarding
+  it upstream.
+
+TRANSFORMS
+  Headroom transformations seen on the latest completed request, such as text,
+  smart_crusher, kompress, or log compression.
+
+TOIN
+  Headroom's token/object indexing activity: patterns, compressions, retrievals,
+  and retrieval rate.
+
+Tips:
+  headroom-meter --live-only    start measuring from zero
+  headroom-meter --scale 10     make the gauges more sensitive
+  headroom-meter --once         print a single snapshot
+"""
 
 PERF_RE = re.compile(
     r"tok_before=(?P<before>\d+).*?"
@@ -516,6 +573,10 @@ def color_enabled(mode: str) -> bool:
 
 
 def main() -> int:
+    if any(arg in {"/help", "help", "explain"} for arg in sys.argv[1:]):
+        print(EXPLAIN_TEXT)
+        return 0
+
     parser = argparse.ArgumentParser(
         description="Show a live terminal dashboard for Headroom compression."
     )
@@ -523,6 +584,11 @@ def main() -> int:
         "--version",
         action="version",
         version=f"headroom-meter {VERSION}",
+    )
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="Explain dashboard labels and exit.",
     )
     parser.add_argument(
         "--log",
@@ -569,6 +635,10 @@ def main() -> int:
         help="Do not use the terminal alternate screen in live mode.",
     )
     args = parser.parse_args()
+
+    if args.explain:
+        print(EXPLAIN_TEXT)
+        return 0
 
     meter = Meter()
     log_path = args.log.expanduser()
