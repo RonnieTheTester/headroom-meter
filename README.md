@@ -3,11 +3,12 @@
 Live terminal meter for Headroom compression.
 
 `headroom-meter` watches `~/.headroom/logs/proxy.log` and turns Headroom's
-proxy logs into a compact live dashboard:
+proxy logs into a live terminal dashboard:
 
 - token savings across completed requests
 - latest request savings
-- frame compression
+- recent-request pulse graph
+- frame-compression graph
 - cache hit rate
 - optimization time
 - active transforms
@@ -18,19 +19,29 @@ This is an unofficial companion tool for Headroom.
 ## Preview
 
 ```text
-Headroom Live Meter
-Status: active  Last event: 3s ago
+HEADROOM REGEN DASHBOARD
+Status ACTIVE  Last event 3s ago
 Log: /Users/you/.headroom/logs/proxy.log
+================================================================================
 
-Token savings  [###-------------------------------]  1.90% (scale full = 25%)
-Saved tokens:  53,769 / 2,827,682 input tokens across 66 requests
-Last request:  2,551 tokens saved from 60,229 (4.24%)
+TOKEN REGEN
+  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  1.90% captured  (full scale: 25%)
+  RAW >> REGEN 2,551 tokens >> MODEL
 
-Frame bytes    [########--------------------------]  5.69%
-Frame events:  64 frames, 53,462 frame tokens saved
+RECENT REQUEST PULSES
+  ▁▁▁▁▂▁▁▁▁▁▅▁▁▁▇▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+  last  4.24%  avg  1.90%  peak 40.96%
 
-Cache hit avg:  92.7%   Avg optimize: 156 ms
-Transforms:   compaction, mixed, text, smart_crusher, kompress, log
+FRAME COMPRESSION
+  █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  5.69% byte reduction  last frame 13.68%
+  ▁▁▁▁▁▁▁▁▁▂▁▁▂▁▁▁▁▃▁▁▁▆▁▁▁▁▁▁▁▂▁▁▇▁▁▁▁
+
+SAVED TOKENS     53,769 total
+LAST REQUEST     2,551 saved from 60,229
+REQUESTS         66 completed, 814 avg saved
+CACHE BATTERY    ███████████████████████░  92.7%
+OPTIMIZE TIME    156 ms avg
+TRANSFORMS       compaction, mixed, text, smart_crusher, kompress, log
 TOIN:         63 patterns, 78 compressions, 0 retrievals (0.0% retrieval rate)
 ```
 
@@ -70,6 +81,18 @@ Make the visual bar more sensitive:
 
 ```bash
 headroom-meter --scale 10
+```
+
+Force color output, useful when piping through a terminal recorder:
+
+```bash
+headroom-meter --color always
+```
+
+Use ASCII-only graphs:
+
+```bash
+headroom-meter --ascii
 ```
 
 Use a custom Headroom log path:

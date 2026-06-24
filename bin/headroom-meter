@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Live terminal meter for Headroom proxy compression logs."""
+"""Live terminal dashboard for Headroom proxy compression logs."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
+import shutil
 import signal
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +37,20 @@ TOIN_RE = re.compile(
 )
 TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})")
 
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+RED = "\033[31m"
+YELLOW = "\033[33m"
+GREEN = "\033[32m"
+CYAN = "\033[36m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+WHITE = "\033[37m"
+
+BLOCKS = "▁▂▃▄▅▆▇█"
+ASCII_BLOCKS = "._:-=+*#"
+
 
 @dataclass
 class PerfSample:
@@ -46,6 +62,11 @@ class PerfSample:
     cache_hit: int
     opt_ms: int
     line: str
+    at: datetime
+
+    @property
+    def pct(self) -> float:
+        return percent(self.saved, self.before)
 
 
 @dataclass
@@ -53,6 +74,13 @@ class FrameSample:
     before: int
     after: int
     saved: int
+    at: datetime
+
+    @property
+    def byte_pct(self) -> float:
+        if self.before <= 0:
+            return 0.0
+        return percent(self.before - self.after, self.before)
 
 
 @dataclass
@@ -80,10 +108,13 @@ class Meter:
         self.last_frame: FrameSample | None = None
         self.last_toin: ToinSample | None = None
         self.last_event_at: datetime | None = None
+        self.recent_pct: deque[float] = deque(maxlen=72)
+        self.recent_saved: deque[int] = deque(maxlen=72)
+        self.recent_frame_pct: deque[float] = deque(maxlen=72)
 
     def add_line(self, line: str) -> bool:
         changed = False
-        timestamp = parse_timestamp(line)
+        timestamp = parse_timestamp(line) or datetime.now()
 
         # Headroom currently emits duplicate PERF lines; only the line with
         # total_ms represents the completed request.
@@ -99,6 +130,7 @@ class Meter:
                     cache_hit=int(match.group("cache_hit")),
                     opt_ms=int(match.group("opt_ms")),
                     line=line.rstrip(),
+                    at=timestamp,
                 )
                 self.perf_requests += 1
                 self.tok_before += sample.before
@@ -108,7 +140,9 @@ class Meter:
                 self.cache_weight += max(sample.before, 1)
                 self.opt_ms_total += sample.opt_ms
                 self.last_perf = sample
-                self.last_event_at = timestamp or datetime.now()
+                self.last_event_at = timestamp
+                self.recent_pct.append(sample.pct)
+                self.recent_saved.append(sample.saved)
                 changed = True
 
         if "frame compressed" in line:
@@ -118,13 +152,15 @@ class Meter:
                     before=int(match.group("before")),
                     after=int(match.group("after")),
                     saved=int(match.group("saved")),
+                    at=timestamp,
                 )
                 self.frame_count += 1
                 self.frame_before += sample.before
                 self.frame_after += sample.after
                 self.frame_tokens_saved += sample.saved
                 self.last_frame = sample
-                self.last_event_at = timestamp or datetime.now()
+                self.last_event_at = timestamp
+                self.recent_frame_pct.append(sample.byte_pct)
                 changed = True
 
         if "TOIN:" in line:
@@ -136,7 +172,7 @@ class Meter:
                     retrievals=int(match.group("retrievals")),
                     rate=float(match.group("rate")),
                 )
-                self.last_event_at = timestamp or datetime.now()
+                self.last_event_at = timestamp
                 changed = True
 
         return changed
@@ -163,6 +199,12 @@ class Meter:
             return 0.0
         return self.opt_ms_total / self.perf_requests
 
+    @property
+    def avg_saved(self) -> float:
+        if self.perf_requests <= 0:
+            return 0.0
+        return self.tok_saved / self.perf_requests
+
 
 def parse_timestamp(line: str) -> datetime | None:
     match = TS_RE.match(line)
@@ -180,8 +222,8 @@ def percent(part: int | float, whole: int | float) -> float:
     return 100.0 * part / whole
 
 
-def fmt_int(value: int) -> str:
-    return f"{value:,}"
+def fmt_int(value: int | float) -> str:
+    return f"{int(value):,}"
 
 
 def fmt_age(dt: datetime | None) -> str:
@@ -197,10 +239,109 @@ def fmt_age(dt: datetime | None) -> str:
     return f"{hours}h {minutes}m ago"
 
 
-def bar(value: float, *, scale: float, width: int = 34) -> str:
+def color(text: str, code: str, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"{code}{text}{RESET}"
+
+
+def compression_color(value: float) -> str:
+    if value >= 8:
+        return GREEN
+    if value >= 3:
+        return CYAN
+    if value > 0:
+        return YELLOW
+    return DIM
+
+
+def health_color(label: str) -> str:
+    if label == "ACTIVE":
+        return GREEN
+    if label == "IDLE":
+        return YELLOW
+    if label == "STALE":
+        return RED
+    return DIM
+
+
+def status_label(meter: Meter) -> str:
+    if meter.last_event_at is None:
+        return "WAITING"
+    seconds = (datetime.now() - meter.last_event_at).total_seconds()
+    if seconds < 30:
+        return "ACTIVE"
+    if seconds < 180:
+        return "IDLE"
+    return "STALE"
+
+
+def gauge(
+    value: float,
+    *,
+    scale: float,
+    width: int,
+    use_color: bool,
+    ascii_mode: bool,
+    active_color: str | None = None,
+) -> str:
+    if width <= 0:
+        return ""
     ratio = 0.0 if scale <= 0 else min(max(value / scale, 0.0), 1.0)
     filled = round(ratio * width)
-    return "[" + "#" * filled + "-" * (width - filled) + "]"
+    fill = "#" if ascii_mode else "█"
+    empty = "-" if ascii_mode else "░"
+    bar = fill * filled + empty * (width - filled)
+    return color(bar, active_color or compression_color(value), use_color)
+
+
+def sparkline(
+    values: deque[float],
+    *,
+    width: int,
+    scale: float,
+    use_color: bool,
+    ascii_mode: bool,
+) -> str:
+    if width <= 0:
+        return ""
+    if not values:
+        empty = "." if ascii_mode else "·"
+        return color(empty * width, DIM, use_color)
+
+    blocks = ASCII_BLOCKS if ascii_mode else BLOCKS
+    data = list(values)[-width:]
+    if len(data) < width:
+        data = [0.0] * (width - len(data)) + data
+    top = max(scale, max(data), 0.01)
+    chars = []
+    for value in data:
+        ratio = min(max(value / top, 0.0), 1.0)
+        idx = min(round(ratio * (len(blocks) - 1)), len(blocks) - 1)
+        chars.append(blocks[idx])
+    return color("".join(chars), compression_color(max(data)), use_color)
+
+
+def flow_line(meter: Meter, width: int, use_color: bool, ascii_mode: bool) -> str:
+    if ascii_mode:
+        arrows = ["-->", "==>", ">>>"]
+        raw = "RAW"
+        saved = "SAVED"
+        sent = "SENT"
+    else:
+        arrows = ["->", "=>", ">>"]
+        raw = "RAW"
+        saved = "REGEN"
+        sent = "MODEL"
+
+    pulse = arrows[meter.frame_count % len(arrows)]
+    last_saved = meter.last_perf.saved if meter.last_perf else 0
+    last_after = meter.last_perf.after if meter.last_perf else 0
+    saved_text = color(f"{fmt_int(last_saved)} tokens", compression_color(percent(last_saved, max(last_saved + last_after, 1))), use_color)
+    base = f"{raw} {pulse} {saved} {saved_text} {pulse} {sent}"
+    if use_color:
+        return base
+    return base[:width]
 
 
 def short_transforms(line: str | None) -> str:
@@ -215,56 +356,74 @@ def short_transforms(line: str | None) -> str:
     return ", ".join(names[:6]) or "none"
 
 
-def status_label(meter: Meter) -> str:
-    if meter.last_event_at is None:
-        return "waiting"
-    seconds = (datetime.now() - meter.last_event_at).total_seconds()
-    if seconds < 30:
-        return "active"
-    if seconds < 180:
-        return "idle"
-    return "stale"
+def metric(label: str, value: str, width: int, use_color: bool) -> str:
+    label_part = color(label.upper().ljust(16), DIM, use_color)
+    return f"{label_part} {value}".ljust(width)
 
 
-def render(meter: Meter, log_path: Path, scale: float) -> str:
+def render(meter: Meter, log_path: Path, scale: float, use_color: bool, ascii_mode: bool) -> str:
+    columns = shutil.get_terminal_size((100, 30)).columns
+    width = min(max(columns - 4, 76), 118)
+    gauge_width = min(max(width - 33, 28), 62)
+    spark_width = min(max(width - 30, 32), 72)
+
     saving_pct = meter.token_savings_pct
     byte_pct = meter.byte_savings_pct
+    status = status_label(meter)
     last_saved = meter.last_perf.saved if meter.last_perf else 0
     last_before = meter.last_perf.before if meter.last_perf else 0
     last_pct = percent(last_saved, last_before)
+    last_frame_pct = meter.last_frame.byte_pct if meter.last_frame else 0.0
+
+    title = color("HEADROOM REGEN DASHBOARD", BOLD + CYAN, use_color)
+    status_text = color(status, BOLD + health_color(status), use_color)
+    dim_log = color(str(log_path), DIM, use_color)
+    rule = color("=" * width, DIM, use_color)
+    subrule = color("-" * width, DIM, use_color)
 
     lines = [
-        "Headroom Live Meter",
-        f"Status: {status_label(meter)}  Last event: {fmt_age(meter.last_event_at)}",
-        f"Log: {log_path}",
+        title,
+        f"Status {status_text}  Last event {fmt_age(meter.last_event_at)}  Log {dim_log}",
+        rule,
         "",
-        f"Token savings  {bar(saving_pct, scale=scale)} {saving_pct:5.2f}% "
-        f"(scale full = {scale:g}%)",
-        f"Saved tokens:  {fmt_int(meter.tok_saved)} / {fmt_int(meter.tok_before)} "
-        f"input tokens across {fmt_int(meter.perf_requests)} requests",
-        f"Last request:  {fmt_int(last_saved)} tokens saved "
-        f"from {fmt_int(last_before)} ({last_pct:.2f}%)",
+        color("TOKEN REGEN", BOLD + WHITE, use_color),
+        f"  {gauge(saving_pct, scale=scale, width=gauge_width, use_color=use_color, ascii_mode=ascii_mode)} "
+        f"{saving_pct:5.2f}% captured  "
+        f"{color('(full scale: ' + f'{scale:g}%' + ')', DIM, use_color)}",
+        f"  {flow_line(meter, width - 2, use_color, ascii_mode)}",
         "",
-        f"Frame bytes    {bar(byte_pct, scale=scale)} {byte_pct:5.2f}%",
-        f"Frame events:  {fmt_int(meter.frame_count)} frames, "
-        f"{fmt_int(meter.frame_tokens_saved)} frame tokens saved",
+        color("RECENT REQUEST PULSES", BOLD + WHITE, use_color),
+        f"  {sparkline(meter.recent_pct, width=spark_width, scale=scale, use_color=use_color, ascii_mode=ascii_mode)}",
+        f"  last {last_pct:5.2f}%  avg {saving_pct:5.2f}%  peak {max(meter.recent_pct or [0.0]):5.2f}%",
         "",
-        f"Cache hit avg: {meter.avg_cache_hit:5.1f}%   "
-        f"Avg optimize: {meter.avg_opt_ms:,.0f} ms",
-        f"Transforms:   {short_transforms(meter.last_perf.line if meter.last_perf else None)}",
+        color("FRAME COMPRESSION", BOLD + WHITE, use_color),
+        f"  {gauge(byte_pct, scale=scale, width=gauge_width, use_color=use_color, ascii_mode=ascii_mode, active_color=BLUE)} "
+        f"{byte_pct:5.2f}% byte reduction  last frame {last_frame_pct:5.2f}%",
+        f"  {sparkline(meter.recent_frame_pct, width=spark_width, scale=scale, use_color=use_color, ascii_mode=ascii_mode)}",
+        "",
+        subrule,
+        metric("saved tokens", f"{color(fmt_int(meter.tok_saved), BOLD + GREEN, use_color)} total", width, use_color),
+        metric("last request", f"{fmt_int(last_saved)} saved from {fmt_int(last_before)}", width, use_color),
+        metric("requests", f"{fmt_int(meter.perf_requests)} completed, {fmt_int(meter.avg_saved)} avg saved", width, use_color),
+        metric("cache battery", f"{gauge(meter.avg_cache_hit, scale=100, width=24, use_color=use_color, ascii_mode=ascii_mode, active_color=GREEN)} {meter.avg_cache_hit:5.1f}%", width, use_color),
+        metric("optimize time", f"{meter.avg_opt_ms:,.0f} ms avg", width, use_color),
+        metric("transforms", short_transforms(meter.last_perf.line if meter.last_perf else None), width, use_color),
     ]
 
     if meter.last_toin:
-        lines.extend(
-            [
-                f"TOIN:         {fmt_int(meter.last_toin.patterns)} patterns, "
+        lines.append(
+            metric(
+                "toin",
+                f"{fmt_int(meter.last_toin.patterns)} patterns, "
                 f"{fmt_int(meter.last_toin.compressions)} compressions, "
                 f"{fmt_int(meter.last_toin.retrievals)} retrievals "
-                f"({meter.last_toin.rate:.1f}% retrieval rate)",
-            ]
+                f"({meter.last_toin.rate:.1f}% retrieval)",
+                width,
+                use_color,
+            )
         )
 
-    lines.extend(["", "Ctrl-C to exit."])
+    lines.extend(["", color("Ctrl-C to exit.", DIM, use_color)])
     return "\n".join(lines)
 
 
@@ -293,9 +452,17 @@ def open_log(path: Path):
             time.sleep(1.0)
 
 
+def color_enabled(mode: str) -> bool:
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Show a live terminal meter for Headroom compression."
+        description="Show a live terminal dashboard for Headroom compression."
     )
     parser.add_argument(
         "--log",
@@ -317,7 +484,7 @@ def main() -> int:
         "--scale",
         type=float,
         default=25.0,
-        help="Savings percent that fills the bar. Default: 25.",
+        help="Savings percent that fills the bars. Default: 25.",
     )
     parser.add_argument(
         "--interval",
@@ -325,11 +492,23 @@ def main() -> int:
         default=1.0,
         help="Refresh interval in seconds. Default: 1.",
     )
+    parser.add_argument(
+        "--color",
+        choices=("auto", "always", "never"),
+        default="auto",
+        help="Color output mode. Default: auto.",
+    )
+    parser.add_argument(
+        "--ascii",
+        action="store_true",
+        help="Use ASCII bars instead of Unicode block graphs.",
+    )
     args = parser.parse_args()
 
     meter = Meter()
     log_path = args.log.expanduser()
     handle = open_log(log_path)
+    use_color = color_enabled(args.color)
 
     if args.live_only:
         handle.seek(0, os.SEEK_END)
@@ -337,7 +516,7 @@ def main() -> int:
         read_available(handle, meter)
 
     if args.once:
-        print(render(meter, log_path, args.scale))
+        print(render(meter, log_path, args.scale, use_color, args.ascii))
         return 0
 
     stop = False
@@ -353,7 +532,7 @@ def main() -> int:
         sys.stdout.write("\033[?25l")
         while not stop:
             read_available(handle, meter)
-            clear_and_print(render(meter, log_path, args.scale))
+            clear_and_print(render(meter, log_path, args.scale, use_color, args.ascii))
             time.sleep(max(args.interval, 0.1))
 
             try:
