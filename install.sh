@@ -11,3 +11,12 @@ chmod +x "$target"
 
 printf 'Installed headroom-meter to %s\n' "$target"
 printf 'Run: headroom-meter\n'
+
+case ":${PATH}:" in
+  *":${target_dir}:"*) ;;
+  *)
+    printf '\nNote: %s is not on your PATH yet.\n' "$target_dir"
+    printf 'Add this to your shell profile:\n'
+    printf '  export PATH="$HOME/.local/bin:$PATH"\n'
+    ;;
+esac

@@ -17,6 +17,7 @@ from pathlib import Path
 
 
 DEFAULT_LOG = Path.home() / ".headroom" / "logs" / "proxy.log"
+VERSION = "0.1.0"
 
 PERF_RE = re.compile(
     r"tok_before=(?P<before>\d+).*?"
@@ -463,6 +464,11 @@ def color_enabled(mode: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Show a live terminal dashboard for Headroom compression."
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"headroom-meter {VERSION}",
     )
     parser.add_argument(
         "--log",

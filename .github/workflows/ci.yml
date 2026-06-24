@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12", "3.x"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile script
+        run: python -m py_compile bin/headroom-meter
+
+      - name: Check version flag
+        run: bin/headroom-meter --version
+
+      - name: Smoke test dashboard output
+        run: |
+          tmp_home="$(mktemp -d)"
+          mkdir -p "$tmp_home/.headroom/logs"
+          cat > "$tmp_home/.headroom/logs/proxy.log" <<'LOG'
+          2026-06-24 13:44:51,960 - headroom.proxy - INFO - [hr_demo] WS /v1/responses frame compressed 48145->42353 bytes (1279 tokens saved, auth_mode=oauth, frame=63)
+          2026-06-24 13:44:58,446 - headroom.proxy - INFO - [hr_demo] PERF model=gpt-5.5 msgs=0 tok_before=58419 tok_after=57140 tok_saved=1279 cache_read=56192 cache_write=948 cache_hit_pct=98 opt_ms=43 total_ms=6205 tok_out=273 ttfb_ms=0 transforms=openai:responses:tool_schema_compaction router:openai:responses:function_call_output:mixed mixed router:openai:responses:function_call_output:text text router:openai:responses:function_call_output:smart_crusher smart_crusher router:openai:responses:function_call_output:kompress kompress client=codex
+          2026-06-24 13:44:59,310 - headroom.proxy - INFO - TOIN: 63 patterns, 78 compressions, 0 retrievals, 0.0% retrieval rate
+          LOG
+          HOME="$tmp_home" bin/headroom-meter --once --color never --ascii
