@@ -30,6 +30,9 @@ jobs:
       - name: Check version flag
         run: bin/headroom-meter --version
 
+      - name: Validate demo SVG
+        run: python -c "import xml.etree.ElementTree as ET; ET.parse('assets/demo.svg')"
+
       - name: Smoke test dashboard output
         run: |
           tmp_home="$(mktemp -d)"

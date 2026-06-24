@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/demo.svg" alt="headroom-meter terminal dashboard preview" width="900">
+  <img src="assets/demo.svg" alt="headroom-meter terminal dashboard preview" width="920">
 </p>
 
 <h1 align="center">headroom-meter</h1>
 
 <p align="center">
-  <strong>Watch Headroom compression happen live.</strong><br>
-  A sleek terminal dashboard that makes token savings feel as tangible as regenerative braking.
+  <strong>Make Headroom compression visible.</strong><br>
+  A live terminal dashboard for teams that want proof their agent context is being recovered, compressed, and reused.
 </p>
 
 <p align="center">
@@ -18,18 +18,41 @@
 
 ---
 
-## Why This Exists
+## The Pitch
 
-Headroom can save a lot of context, but raw proxy logs do not make that obvious.
-`headroom-meter` turns those invisible savings into a live dashboard:
+LLM agents burn context quietly. Headroom compresses that context, but the work is
+mostly invisible unless you read proxy logs. `headroom-meter` turns those logs
+into an executive-readable dashboard: token savings, compression spikes, cache
+hits, frame reduction, and active transforms, all updating live in your terminal.
 
-- a token regen gauge that fills as Headroom compresses
-- recent request pulses so spikes are visible immediately
-- frame-compression bars for websocket traffic
-- a cache battery, optimization timing, and active transform list
-- no dependencies, no daemon, no telemetry
+It is the hybrid-car regen meter for AI context.
 
-If Headroom is doing work, this makes the work visible.
+## Field Reading
+
+Example measurement from one local Codex + Headroom session on June 24, 2026:
+
+| Signal | Reading |
+| --- | ---: |
+| Completed requests | 196 |
+| Input tokens before Headroom | 14,180,388 |
+| Input tokens after Headroom | 13,845,926 |
+| Tokens saved | 334,462 |
+| Average saved per request | 1,706 |
+| Peak single-request save | 65,187 |
+| Average cache hit rate | 95.2% |
+| WebSocket frame tokens saved | 154,575 |
+| Frame byte reduction | 6.07% |
+
+These numbers are a field reading from a real local `proxy.log`, not a universal
+benchmark. Your savings depend on workflow, model, context shape, and Headroom
+configuration.
+
+## Why Teams Care
+
+- **See ROI while work is happening.** A live meter makes compression tangible.
+- **Debug context-heavy agent sessions.** Spikes and flatlines are visible at a glance.
+- **Explain Headroom to non-operators.** The dashboard is easier to understand than `tok_before=...`.
+- **Keep the stack lightweight.** One Python script, no packages, no daemon, no telemetry.
 
 ## Install
 
@@ -110,7 +133,7 @@ Check the installed version:
 headroom-meter --version
 ```
 
-## What It Reads
+## What It Measures
 
 By default, `headroom-meter` tails:
 
@@ -118,13 +141,40 @@ By default, `headroom-meter` tails:
 ~/.headroom/logs/proxy.log
 ```
 
-It parses Headroom log fields such as:
+It parses Headroom fields such as:
 
 ```text
 tok_before=60229 tok_after=57678 tok_saved=2551 cache_hit_pct=98
 ```
 
+Then it turns them into:
+
+- token regen gauge
+- recent request pulse graph
+- frame compression graph
+- cache battery
+- optimization timing
+- active transform list
+- TOIN pattern/compression activity
+
 The script is read-only. It does not modify Headroom config or send data anywhere.
+
+## How The Technology Fits
+
+`headroom-meter` does not perform compression. It instruments Headroom's
+compression logs and makes the effect legible.
+
+The underlying idea is well studied: long prompts increase memory, latency, and
+cost, while prompt/context compression attempts to remove redundancy without
+removing the information the model needs. Relevant work includes:
+
+- [Selective Context](https://arxiv.org/abs/2310.06201), which reports lower memory and inference time by pruning redundant context.
+- [LLMLingua](https://arxiv.org/abs/2310.05736), a coarse-to-fine prompt compression approach.
+- [LLMLingua-2](https://arxiv.org/abs/2403.12968), which frames prompt compression as faithful token classification.
+- [Prompt Compression for Large Language Models: A Survey](https://arxiv.org/abs/2410.12388), a broader map of hard and soft prompt compression methods.
+- [Lost in the Middle](https://arxiv.org/abs/2307.03172), a reminder that longer context is not automatically better-used context.
+
+Read the technical note: [docs/technology.md](docs/technology.md).
 
 ## Requirements
 

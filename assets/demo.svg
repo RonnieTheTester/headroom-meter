@@ -1,103 +1,68 @@
-<svg width="1100" height="660" viewBox="0 0 1100 660" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Headroom Meter terminal dashboard preview">
+<svg width="1200" height="760" viewBox="0 0 1200 760" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="headroom-meter terminal dashboard preview">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1100" y2="660" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#071116"/>
-      <stop offset="1" stop-color="#101820"/>
+    <linearGradient id="screen" x1="0" y1="0" x2="1200" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071013"/>
+      <stop offset="1" stop-color="#0C161D"/>
     </linearGradient>
-    <linearGradient id="token" x1="72" y1="184" x2="984" y2="184" gradientUnits="userSpaceOnUse">
+    <linearGradient id="greenBlue" x1="120" y1="240" x2="960" y2="240" gradientUnits="userSpaceOnUse">
       <stop stop-color="#00D084"/>
-      <stop offset="1" stop-color="#33C3FF"/>
+      <stop offset="1" stop-color="#37C4FF"/>
     </linearGradient>
-    <linearGradient id="frame" x1="72" y1="404" x2="984" y2="404" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#5B8CFF"/>
-      <stop offset="1" stop-color="#7CFFCB"/>
-    </linearGradient>
-    <filter id="shadow" x="0" y="0" width="1100" height="660" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.38"/>
+    <filter id="terminalShadow" x="0" y="0" width="1200" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000000" flood-opacity="0.45"/>
     </filter>
     <style>
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-      .title { font-size: 32px; font-weight: 800; letter-spacing: 0; }
-      .label { font-size: 20px; font-weight: 700; letter-spacing: 0; }
-      .body { font-size: 18px; letter-spacing: 0; }
-      .small { font-size: 15px; letter-spacing: 0; }
-      .tiny { font-size: 13px; letter-spacing: 0; }
+      .title { font-size: 30px; font-weight: 800; letter-spacing: 0; }
+      .line { font-size: 20px; letter-spacing: 0; }
+      .small { font-size: 16px; letter-spacing: 0; }
+      .prompt { font-size: 18px; letter-spacing: 0; }
     </style>
   </defs>
 
-  <rect width="1100" height="660" rx="26" fill="#051014"/>
-  <rect x="28" y="28" width="1044" height="604" rx="18" fill="url(#bg)" stroke="#1D343C" filter="url(#shadow)"/>
-  <rect x="28" y="28" width="1044" height="48" rx="18" fill="#0E1C22"/>
-  <circle cx="58" cy="52" r="7" fill="#FF5F56"/>
-  <circle cx="82" cy="52" r="7" fill="#FFBD2E"/>
-  <circle cx="106" cy="52" r="7" fill="#27C93F"/>
+  <rect width="1200" height="760" rx="30" fill="#050B0E"/>
+  <rect x="42" y="42" width="1116" height="676" rx="22" fill="url(#screen)" stroke="#1B3037" filter="url(#terminalShadow)"/>
 
-  <text x="72" y="124" class="mono title" fill="#E7FAF4">HEADROOM REGEN DASHBOARD</text>
-  <rect x="72" y="143" width="86" height="28" rx="14" fill="#123B2C" stroke="#00D084"/>
-  <text x="92" y="163" class="mono small" fill="#7CFFCB">ACTIVE</text>
-  <text x="176" y="163" class="mono body" fill="#B2C7C2">Last event 3s ago</text>
-  <text x="414" y="163" class="mono body" fill="#6D8584">~/.headroom/logs/proxy.log</text>
+  <rect x="42" y="42" width="1116" height="54" rx="22" fill="#111D23"/>
+  <circle cx="76" cy="69" r="7" fill="#FF5F56"/>
+  <circle cx="101" cy="69" r="7" fill="#FFBD2E"/>
+  <circle cx="126" cy="69" r="7" fill="#27C93F"/>
+  <text x="158" y="76" class="mono small" fill="#789096">~/headroom-meter</text>
 
-  <line x1="72" y1="188" x2="1028" y2="188" stroke="#1D343C"/>
+  <text x="76" y="134" class="mono prompt" fill="#789096">$ headroom-meter</text>
 
-  <text x="72" y="230" class="mono label" fill="#F2FFFC">TOKEN REGEN</text>
-  <rect x="72" y="252" width="710" height="24" rx="12" fill="#15282E"/>
-  <rect x="72" y="252" width="235" height="24" rx="12" fill="url(#token)"/>
-  <text x="806" y="272" class="mono body" fill="#7CFFCB">1.90% captured</text>
-  <text x="72" y="314" class="mono body" fill="#9CB1AE">RAW</text>
-  <text x="132" y="314" class="mono body" fill="#33C3FF">&gt;&gt;</text>
-  <text x="178" y="314" class="mono body" fill="#F2FFFC">REGEN</text>
-  <text x="270" y="314" class="mono body" fill="#00D084">2,551 tokens</text>
-  <text x="420" y="314" class="mono body" fill="#33C3FF">&gt;&gt;</text>
-  <text x="466" y="314" class="mono body" fill="#9CB1AE">MODEL</text>
+  <text x="76" y="180" class="mono title" fill="#EAFBF7">HEADROOM REGEN DASHBOARD</text>
+  <rect x="76" y="202" width="88" height="30" rx="15" fill="#12392C" stroke="#00D084"/>
+  <text x="96" y="223" class="mono small" fill="#7CFFCB">ACTIVE</text>
+  <text x="186" y="223" class="mono line" fill="#B8CBC7">Last event 4s ago</text>
+  <text x="430" y="223" class="mono line" fill="#6E858A">~/.headroom/logs/proxy.log</text>
 
-  <text x="72" y="366" class="mono label" fill="#F2FFFC">RECENT REQUEST PULSES</text>
-  <g transform="translate(72 388)">
-    <rect x="0" y="0" width="712" height="92" rx="10" fill="#0D1B20" stroke="#1D343C"/>
-    <rect x="18" y="65" width="10" height="9" rx="2" fill="#1B4F51"/>
-    <rect x="36" y="61" width="10" height="13" rx="2" fill="#1B4F51"/>
-    <rect x="54" y="50" width="10" height="24" rx="2" fill="#257E76"/>
-    <rect x="72" y="63" width="10" height="11" rx="2" fill="#1B4F51"/>
-    <rect x="90" y="66" width="10" height="8" rx="2" fill="#1B4F51"/>
-    <rect x="108" y="38" width="10" height="36" rx="2" fill="#24A37D"/>
-    <rect x="126" y="62" width="10" height="12" rx="2" fill="#1B4F51"/>
-    <rect x="144" y="56" width="10" height="18" rx="2" fill="#257E76"/>
-    <rect x="162" y="68" width="10" height="6" rx="2" fill="#1B4F51"/>
-    <rect x="180" y="18" width="10" height="56" rx="2" fill="#00D084"/>
-    <rect x="198" y="63" width="10" height="11" rx="2" fill="#1B4F51"/>
-    <rect x="216" y="60" width="10" height="14" rx="2" fill="#1B4F51"/>
-    <rect x="234" y="46" width="10" height="28" rx="2" fill="#257E76"/>
-    <rect x="252" y="65" width="10" height="9" rx="2" fill="#1B4F51"/>
-    <rect x="270" y="67" width="10" height="7" rx="2" fill="#1B4F51"/>
-    <rect x="288" y="32" width="10" height="42" rx="2" fill="#24A37D"/>
-    <rect x="306" y="64" width="10" height="10" rx="2" fill="#1B4F51"/>
-    <rect x="324" y="59" width="10" height="15" rx="2" fill="#1B4F51"/>
-    <rect x="342" y="68" width="10" height="6" rx="2" fill="#1B4F51"/>
-    <rect x="360" y="12" width="10" height="62" rx="2" fill="#33C3FF"/>
-    <rect x="378" y="62" width="10" height="12" rx="2" fill="#1B4F51"/>
-    <rect x="396" y="55" width="10" height="19" rx="2" fill="#257E76"/>
-    <rect x="414" y="67" width="10" height="7" rx="2" fill="#1B4F51"/>
-    <rect x="432" y="64" width="10" height="10" rx="2" fill="#1B4F51"/>
-    <rect x="450" y="40" width="10" height="34" rx="2" fill="#24A37D"/>
-    <rect x="468" y="62" width="10" height="12" rx="2" fill="#1B4F51"/>
-    <rect x="486" y="56" width="10" height="18" rx="2" fill="#257E76"/>
-    <rect x="504" y="67" width="10" height="7" rx="2" fill="#1B4F51"/>
-    <rect x="522" y="60" width="10" height="14" rx="2" fill="#1B4F51"/>
-    <rect x="540" y="22" width="10" height="52" rx="2" fill="#00D084"/>
-    <rect x="558" y="66" width="10" height="8" rx="2" fill="#1B4F51"/>
-    <rect x="576" y="54" width="10" height="20" rx="2" fill="#257E76"/>
-    <rect x="594" y="63" width="10" height="11" rx="2" fill="#1B4F51"/>
-    <rect x="612" y="48" width="10" height="26" rx="2" fill="#257E76"/>
-    <rect x="630" y="64" width="10" height="10" rx="2" fill="#1B4F51"/>
-    <rect x="648" y="36" width="10" height="38" rx="2" fill="#24A37D"/>
-    <rect x="666" y="58" width="10" height="16" rx="2" fill="#1B4F51"/>
-    <text x="18" y="118" class="mono small" fill="#9CB1AE">last 4.24%    avg 1.90%    peak 40.96%</text>
-  </g>
+  <text x="76" y="280" class="mono line" fill="#F1FFFC">TOKEN REGEN</text>
+  <rect x="76" y="302" width="770" height="24" rx="12" fill="#16262C"/>
+  <rect x="76" y="302" width="235" height="24" rx="12" fill="url(#greenBlue)"/>
+  <text x="870" y="322" class="mono line" fill="#7CFFCB">2.36% captured</text>
+  <text x="76" y="360" class="mono line" fill="#8EA5A4">RAW</text>
+  <text x="135" y="360" class="mono line" fill="#37C4FF">&gt;&gt;</text>
+  <text x="184" y="360" class="mono line" fill="#EAFBF7">REGEN</text>
+  <text x="282" y="360" class="mono line" fill="#00D084">1,706 avg tokens/request</text>
+  <text x="585" y="360" class="mono line" fill="#37C4FF">&gt;&gt;</text>
+  <text x="634" y="360" class="mono line" fill="#8EA5A4">MODEL</text>
 
-  <text x="72" y="540" class="mono label" fill="#F2FFFC">CACHE BATTERY</text>
-  <rect x="260" y="518" width="260" height="25" rx="12" fill="#15282E"/>
-  <rect x="260" y="518" width="241" height="25" rx="12" fill="#00D084"/>
-  <text x="540" y="539" class="mono body" fill="#7CFFCB">92.7%</text>
+  <text x="76" y="420" class="mono line" fill="#F1FFFC">RECENT REQUEST PULSES</text>
+  <text x="76" y="456" class="mono line" fill="#00D084">▁▁▂▁▁▃▁▁▆▁▁▂▁▇▁▁▁▂▁▁▅▁▁▂▁▁▁▃▁▁█▁▁▂▁▁▁▁</text>
+  <text x="76" y="492" class="mono small" fill="#8EA5A4">avg 2.36%   peak request 65,187 tokens saved   196 completed requests</text>
 
-  <text x="72" y="588" class="mono small" fill="#6D8584">No dependencies. Reads your local Headroom proxy log. Ctrl-C to exit.</text>
+  <text x="76" y="552" class="mono line" fill="#F1FFFC">FRAME COMPRESSION</text>
+  <rect x="76" y="574" width="770" height="24" rx="12" fill="#16262C"/>
+  <rect x="76" y="574" width="320" height="24" rx="12" fill="#5B8CFF"/>
+  <text x="870" y="594" class="mono line" fill="#A9C7FF">6.07% byte reduction</text>
+
+  <line x1="76" y1="632" x2="1124" y2="632" stroke="#1B3037"/>
+  <text x="76" y="670" class="mono line" fill="#EAFBF7">334,462</text>
+  <text x="178" y="670" class="mono small" fill="#789096">tokens saved</text>
+  <text x="360" y="670" class="mono line" fill="#EAFBF7">95.2%</text>
+  <text x="430" y="670" class="mono small" fill="#789096">cache hit avg</text>
+  <text x="610" y="670" class="mono line" fill="#EAFBF7">154,575</text>
+  <text x="718" y="670" class="mono small" fill="#789096">frame tokens saved</text>
+  <text x="948" y="670" class="mono line" fill="#EAFBF7">0 deps</text>
 </svg>
