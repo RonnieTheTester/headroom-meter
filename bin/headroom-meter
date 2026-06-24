@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 DEFAULT_LOG = Path.home() / ".headroom" / "logs" / "proxy.log"
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 PERF_RE = re.compile(
     r"tok_before=(?P<before>\d+).*?"
@@ -429,9 +429,25 @@ def render(meter: Meter, log_path: Path, scale: float, use_color: bool, ascii_mo
 
 
 def clear_and_print(text: str) -> None:
-    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.write("\033[H\033[J")
     sys.stdout.write(text)
-    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+
+def enter_live_screen(use_alt_screen: bool) -> None:
+    if use_alt_screen:
+        sys.stdout.write("\033[?1049h")
+    sys.stdout.write("\033[?25l")
+    sys.stdout.write("\033[H\033[J")
+    sys.stdout.flush()
+
+
+def exit_live_screen(use_alt_screen: bool) -> None:
+    sys.stdout.write("\033[?25h")
+    if use_alt_screen:
+        sys.stdout.write("\033[?1049l")
+    else:
+        sys.stdout.write("\n")
     sys.stdout.flush()
 
 
@@ -509,6 +525,11 @@ def main() -> int:
         action="store_true",
         help="Use ASCII bars instead of Unicode block graphs.",
     )
+    parser.add_argument(
+        "--no-alt-screen",
+        action="store_true",
+        help="Do not use the terminal alternate screen in live mode.",
+    )
     args = parser.parse_args()
 
     meter = Meter()
@@ -534,8 +555,10 @@ def main() -> int:
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
 
+    use_alt_screen = not args.no_alt_screen and sys.stdout.isatty()
+
     try:
-        sys.stdout.write("\033[?25l")
+        enter_live_screen(use_alt_screen)
         while not stop:
             read_available(handle, meter)
             clear_and_print(render(meter, log_path, args.scale, use_color, args.ascii))
@@ -552,8 +575,7 @@ def main() -> int:
         try:
             handle.close()
         finally:
-            sys.stdout.write("\033[?25h\n")
-            sys.stdout.flush()
+            exit_live_screen(use_alt_screen)
 
     return 0
 

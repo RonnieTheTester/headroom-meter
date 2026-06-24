@@ -59,6 +59,9 @@ Start the live dashboard:
 headroom-meter
 ```
 
+Live mode uses your terminal's alternate screen, so it stays pinned in place
+instead of filling your scrollback.
+
 Start counting from zero instead of aggregating the existing log:
 
 ```bash
@@ -87,6 +90,12 @@ Use ASCII-only graphs:
 
 ```bash
 headroom-meter --ascii
+```
+
+Disable alternate-screen mode if you explicitly want scrollback output:
+
+```bash
+headroom-meter --no-alt-screen
 ```
 
 Use a custom Headroom log path:
